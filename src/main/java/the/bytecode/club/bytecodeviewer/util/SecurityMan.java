@@ -196,7 +196,9 @@ public class SecurityMan extends SecurityManager
 
     @Override
     public void checkListen(int port) {
-        throw new SecurityException("BCV is awesome, blocking port " + port + " from listening");
+        if (port != BytecodeViewer.serverPort) {
+            throw new SecurityException("BCV is awesome, blocking port " + port + " from listening");
+        }
     }
 
     @Override

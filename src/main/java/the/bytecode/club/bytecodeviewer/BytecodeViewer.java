@@ -2,13 +2,19 @@ package the.bytecode.club.bytecodeviewer;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+
+import fi.iki.elonen.NanoHTTPD;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Base64.Decoder;
+
 import javax.swing.SwingUtilities;
 import me.konloch.kontainer.io.DiskReader;
 import org.apache.commons.io.FileUtils;
@@ -227,6 +233,7 @@ public class BytecodeViewer
             {
                 BytecodeViewer.boot(false);
                 Configuration.bootState = BootState.GUI_SHOWING;
+                startOpenFileHttpServer();
             }
             else //CLI arguments say keep it CLI
             {
@@ -284,10 +291,11 @@ public class BytecodeViewer
         //print startup time
         System.out.println("Start up took " + ((System.currentTimeMillis() - Configuration.start) / 1000) + " seconds");
         
+
         //request focus on GUI for hotkeys on start
         if (!cli)
             viewer.requestFocus();
-        
+
         //open files from launch args
         if (!cli)
             if (launchArgs.length >= 1)
@@ -747,8 +755,34 @@ public class BytecodeViewer
             tempF.mkdir();
     }
     
+    public static int serverPort = 63973;
     /**
      * because Smali and Baksmali System.exit if it failed
      */
     public static void exit(int i) { }
+
+    public static void startOpenFileHttpServer() throws IOException {
+        NanoHTTPD nanoHTTPD = new NanoHTTPD(serverPort) {
+            @Override
+            public Response serve(IHTTPSession session) {
+                try {
+                    String uri = session.getUri();
+                    if (uri.endsWith("open")) {
+                        String file = session.getParms().get("file");
+                        if (uri.endsWith("b64open")) {
+                            file = new String(Base64.getDecoder().decode(file));
+                        }
+                        File[] files = { new File(file) };
+                        openFiles(files, true);
+                    }
+                } catch (Exception e) {
+                    return newFixedLengthResponse(e.getClass().toString() + ":" + e.getMessage());
+                }
+                return super.serve(session);
+            }
+
+        };
+        nanoHTTPD.start();
+
+    }
 }
