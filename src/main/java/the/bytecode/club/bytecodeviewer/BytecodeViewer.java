@@ -1,24 +1,34 @@
 package the.bytecode.club.bytecodeviewer;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import static javax.swing.JOptionPane.QUESTION_MESSAGE;
+import static the.bytecode.club.bytecodeviewer.Constants.DEV_MODE;
+import static the.bytecode.club.bytecodeviewer.Constants.FAT_JAR;
+import static the.bytecode.club.bytecodeviewer.Constants.VERSION;
+import static the.bytecode.club.bytecodeviewer.Constants.tempDirectory;
 
-import fi.iki.elonen.NanoHTTPD;
-
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Base64.Decoder;
 
 import javax.swing.SwingUtilities;
-import me.konloch.kontainer.io.DiskReader;
+
 import org.apache.commons.io.FileUtils;
 import org.objectweb.asm.tree.ClassNode;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import fi.iki.elonen.NanoHTTPD;
+import me.konloch.kontainer.io.DiskReader;
 import the.bytecode.club.bytecodeviewer.api.BCV;
 import the.bytecode.club.bytecodeviewer.api.ExceptionUI;
 import the.bytecode.club.bytecodeviewer.bootloader.Boot;
@@ -43,12 +53,6 @@ import the.bytecode.club.bytecodeviewer.util.LazyNameUtil;
 import the.bytecode.club.bytecodeviewer.util.MiscUtils;
 import the.bytecode.club.bytecodeviewer.util.PingBack;
 import the.bytecode.club.bytecodeviewer.util.SecurityMan;
-
-import static javax.swing.JOptionPane.QUESTION_MESSAGE;
-import static the.bytecode.club.bytecodeviewer.Constants.DEV_MODE;
-import static the.bytecode.club.bytecodeviewer.Constants.FAT_JAR;
-import static the.bytecode.club.bytecodeviewer.Constants.VERSION;
-import static the.bytecode.club.bytecodeviewer.Constants.tempDirectory;
 
 /***************************************************************************
  * Bytecode Viewer (BCV) - Java & Android Reverse Engineering Suite        *
@@ -171,7 +175,33 @@ public class BytecodeViewer
     public static void main(String[] args)
     {
         launchArgs = args;
-        
+        for (int i = 0; i < args.length; i++) {
+            boolean reuseView = args[i].equals("--reuse-view");
+            if (reuseView) {
+                Boolean opened = true;
+                if (i != args.length - 1) {
+                    // 尝试请求
+                    for (int j = i + 1; j < args.length; j++) {
+                        String fp = args[j];
+                        File file = new File(fp);
+                        if (file.exists()) {
+                            try {
+                                sendGet("http://127.0.0.1:63973/b64open?file=" + new String(Base64.getEncoder().encode(
+                                        file.getAbsolutePath().getBytes())));
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                opened = false;
+                            }
+                        }
+                    }
+                }
+                if (opened) {
+                    return;
+                }
+
+            }
+
+        }
         //welcome message
         System.out.print("Bytecode Viewer " + VERSION);
         if (FAT_JAR)
@@ -299,8 +329,11 @@ public class BytecodeViewer
         //open files from launch args
         if (!cli)
             if (launchArgs.length >= 1)
-                for (String s : launchArgs)
-                    openFiles(new File[]{new File(s)}, true);
+                for (String s : launchArgs) {
+                    if (!s.equalsIgnoreCase("--reuse-view")) {
+                        openFiles(new File[] { new File(s) }, true);
+                    }
+                }
     }
     
     /**
@@ -774,15 +807,43 @@ public class BytecodeViewer
                         }
                         File[] files = { new File(file) };
                         openFiles(files, true);
+                        viewer.requestFocus();
                     }
                 } catch (Exception e) {
                     return newFixedLengthResponse(e.getClass().toString() + ":" + e.getMessage());
                 }
-                return super.serve(session);
+                return newFixedLengthResponse("ok");
             }
 
         };
         nanoHTTPD.start();
 
     }
+
+    // HTTP GET请求
+    private static String sendGet(String url) throws Exception {
+
+        URL obj = new URL(url);
+        HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+
+        // 默认值我GET
+        con.setRequestMethod("GET");
+
+        int responseCode = con.getResponseCode();
+        System.out.println("\nSending 'GET' request to URL : " + url);
+        System.out.println("Response Code : " + responseCode);
+
+        BufferedReader in = new BufferedReader(
+                new InputStreamReader(con.getInputStream()));
+        String inputLine;
+        StringBuffer response = new StringBuffer();
+
+        while ((inputLine = in.readLine()) != null) {
+            response.append(inputLine);
+        }
+        in.close();
+        return response.toString();
+
+    }
+
 }
